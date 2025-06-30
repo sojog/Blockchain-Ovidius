@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Counter DApp</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 5px;
+            font-size: 16px;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        #currentValue {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Counter DApp</h1>
+        
+        <div class="section">
+            <h3>Conectare MetaMask</h3>
+            <button id="connectButton" onclick="connectWallet()">Conectează MetaMask</button>
+            <div id="walletStatus" class="status info" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h3>Valoare Curentă</h3>
+            <div id="currentValue">-</div>
+            <button onclick="getCurrentNumber()">Actualizează Valoarea</button>
+        </div>
+
+        <div class="section">
+            <h3>Incrementează Numărul</h3>
+            <button onclick="incrementNumber()">Increment</button>
+        </div>
+
+        <div class="section">
+            <h3>Setează Numărul</h3>
+            <input type="number" id="newNumberInput" placeholder="Introdu numărul nou" min="0">
+            <button onclick="setNumber()">Setează Numărul</button>
+        </div>
+
+        <div id="transactionStatus" class="status" style="display: none;"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+    <script>
+        // Configurație contract
+        const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+        const CONTRACT_ABI = [
+            {
+                "inputs": [],
+                "name": "increment",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "number",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "newNumber",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "setNumber",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
+        let web3;
+        let contract;
+        let userAccount;
+
+        // Conectare la MetaMask
+        async function connectWallet() {
+            try {
+                if (typeof window.ethereum !== 'undefined') {
+                    // Cerere de conectare la MetaMask
+                    const accounts = await window.ethereum.request({
+                        method: 'eth_requestAccounts'
+                    });
+                    
+                    userAccount = accounts[0];
+                    web3 = new Web3(window.ethereum);
+                    contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+                    
+                    // Verifică rețeaua
+                    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    if (chainId !== '0x7a69') { // 31337 în hex (Anvil/Hardhat local)
+                        showStatus('Conectează-te la rețeaua locală (localhost:8545)', 'error');
+                        return;
+                    }
+                    
+                    document.getElementById('connectButton').innerText = 'Conectat';
+                    document.getElementById('connectButton').disabled = true;
+                    showWalletStatus(`Conectat: ${userAccount}`, 'success');
+                    
+                    // Actualizează valoarea curentă
+                    await getCurrentNumber();
+                } else {
+                    showStatus('MetaMask nu este instalat!', 'error');
+                }
+            } catch (error) {
+                console.error(error);
+                showStatus('Eroare la conectarea cu MetaMask: ' + error.message, 'error');
+            }
+        }
+
+        // Citește valoarea curentă
+        async function getCurrentNumber() {
+            try {
+                if (!contract) {
+                    showStatus('Conectează-te mai întâi la MetaMask', 'error');
+                    return;
+                }
+                
+                const currentValue = await contract.methods.number().call();
+                document.getElementById('currentValue').innerText = currentValue;
+                showStatus('Valoarea a fost actualizată', 'success');
+            } catch (error) {
+                console.error(error);
+                showStatus('Eroare la citirea valorii: ' + error.message, 'error');
+            }
+        }
+
+        // Incrementează numărul
+        async function incrementNumber() {
+            try {
+                if (!contract || !userAccount) {
+                    showStatus('Conectează-te mai întâi la MetaMask', 'error');
+                    return;
+                }
+                
+                showStatus('Se trimite tranzacția...', 'info');
+                
+                const result = await contract.methods.increment().send({
+                    from: userAccount
+                });
+                
+                showStatus('Tranzacție reușită! Hash: ' + result.transactionHash, 'success');
+                
+                // Actualizează valoarea după tranzacție
+                setTimeout(getCurrentNumber, 2000);
+            } catch (error) {
+                console.error(error);
+                showStatus('Eroare la incrementare: ' + error.message, 'error');
+            }
+        }
+
+        // Setează un număr nou
+        async function setNumber() {
+            try {
+                if (!contract || !userAccount) {
+                    showStatus('Conectează-te mai întâi la MetaMask', 'error');
+                    return;
+                }
+                
+                const newNumber = document.getElementById('newNumberInput').value;
+                if (!newNumber || newNumber < 0) {
+                    showStatus('Introdu un număr valid', 'error');
+                    return;
+                }
+                
+                showStatus('Se trimite tranzacția...', 'info');
+                
+                const result = await contract.methods.setNumber(newNumber).send({
+                    from: userAccount
+                });
+                
+                showStatus('Tranzacție reușită! Hash: ' + result.transactionHash, 'success');
+                
+                // Curăță input-ul și actualizează valoarea
+                document.getElementById('newNumberInput').value = '';
+                setTimeout(getCurrentNumber, 2000);
+            } catch (error) {
+                console.error(error);
+                showStatus('Eroare la setarea numărului: ' + error.message, 'error');
+            }
+        }
+
+        // Afișează statusul tranzacțiilor
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('transactionStatus');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerText = message;
+            statusDiv.style.display = 'block';
+            
+            // Ascunde mesajul după 5 secunde pentru mesajele de succes
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Afișează statusul wallet-ului
+        function showWalletStatus(message, type) {
+            const statusDiv = document.getElementById('walletStatus');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerText = message;
+            statusDiv.style.display = 'block';
+        }
+
+        // Detectează schimbările de cont în MetaMask
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', function (accounts) {
+                if (accounts.length === 0) {
+                    location.reload();
+                } else {
+                    userAccount = accounts[0];
+                    showWalletStatus(`Conectat: ${userAccount}`, 'success');
+                }
+            });
+
+            window.ethereum.on('chainChanged', function (chainId) {
+                location.reload();
+            });
+        }
+    </script>
+</body>
+</html> 

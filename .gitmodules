@@ -1,0 +1,6 @@
+[submodule "Curs8/Grupa1/lib/forge-std"]
+	path = Curs8/Grupa1/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "Curs8/Grupa2/lib/forge-std"]
+	path = Curs8/Grupa2/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
